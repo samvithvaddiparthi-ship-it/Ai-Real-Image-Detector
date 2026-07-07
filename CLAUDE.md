@@ -8,12 +8,47 @@ Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
   - 18,514 images = **9,257 real / 9,257 AI**, balanced, fully paired scenes.
   - ~1,850 images per generator (sd21/sdxl/sd3/dalle3/mj6), even.
   - All images verified with full pixel decode: **0 broken / 0 truncated**.
+  - Verified 0 exact-duplicate real files (v1's contamination bug absent).
   - `data/raw/manifest.csv` columns: `scene_id, label_a, generator, path`.
     (real + its AI twin share a `scene_id` — the key to leakage-safe splitting.)
   - Sample grids in `reports/` (sample_grid.png, late_scenes_grid.png).
-- **NEXT: Phase 2** — leakage-safe train/val/test split by `scene_id`, hold out
-  Midjourney (mj6) entirely for the generalization test, write `src/preprocessing.py`
-  (one shared resize+normalize used by BOTH training and inference).
+- **Phase 2 COMPLETE.**
+  - `src/preprocessing.py` — THE shared contract (golden rule #1). One
+    resize+normalize (ImageNet stats, 224). `get_eval_transform()` is the
+    inference contract used by val/test/held-out AND the deployed app;
+    `get_train_transform()` = same normalize + light aug (train-only).
+  - `src/split_dataset.py` -> `data/splits.csv` (manifest + `split` column).
+    Leakage-safe split by `scene_id`; mj6 held out ENTIRELY as `gen_holdout`;
+    other 4 generators split 80/10/10 stratified by generator.
+    train 11,848 / val 1,480 / test 1,480 / gen_holdout 3,706 (all balanced).
+    Runtime asserts confirm: every scene in exactly one split; mj6 only in
+    gen_holdout. Deterministic (SEED=42).
+  - KNOWN RISK for Phase 5: reals are varied aspect ratios (COCO, min side ~182);
+    AI images are often square (512²/270²). Possible "square=AI" shortcut.
+- **Phase 3 COMPLETE.** `src/train.py` + `src/dataset.py`.
+  - ResNet18 (ImageNet-pretrained), full fine-tune, AdamW lr=1e-4 wd=1e-4,
+    CrossEntropyLoss (data already 50/50 -> no class weights). MPS, batch 64.
+  - Val-based early stopping (patience 3). Best = epoch 6: val_loss 0.141,
+    **val_acc 0.955**. Early-stopped at epoch 9. History: reports/train_history.csv.
+  - Label convention PINNED in src/dataset.py: 0=real, 1=ai.
+  - Checkpoint models/resnet18_baseline.pth EMBEDS the preprocessing contract
+    (image_size, imagenet mean/std, class_names); eval/inference assert-verify it.
+  - SSL note: pretrained-weights download needs `SSL_CERT_FILE=$(python -c "import
+    certifi;print(certifi.where())")` (macOS system-Python cert issue).
+- **Phase 4 COMPLETE.** `src/evaluate.py` -> reports/eval_metrics.json + confusion_*.png.
+  - In-distribution TEST (sd21/sdxl/sd3/dalle3): **acc 0.954, F1(ai) 0.954**,
+    P(ai) 0.947, R(ai) 0.962, real_recall 0.946. Per-gen AI recall: sdxl 0.984,
+    dalle3 0.979, sd21 0.946, sd3 0.940. Strong + even across seen generators.
+  - Held-out MIDJOURNEY (mj6, UNSEEN): **acc 0.765, AI recall 0.575**, but
+    P(ai) 0.928 and real_recall 0.955. => model is CONSERVATIVE on mj6: misses
+    ~42% of mj6 (false negatives), rarely false-positives. This is the real
+    generalization gap v1 hid. Failure mode = mj6 photorealism not recognized.
+  - HEADLINE: in-dist AI recall 0.962 vs held-out mj6 AI recall 0.575.
+- **NEXT: Phase 5 — Harden.** Target: raise mj6 recall without wrecking precision.
+  Levers: real-world augmentation (JPEG recompress, down/upscale, blur), decision-
+  threshold tuning / calibration (precision is high, so lowering threshold should
+  recover mj6 recall cheaply), address the square-vs-varied-AR shortcut, possibly
+  a stronger backbone (-> Colab). Re-run evaluate.py to compare.
 
 ## Working style (important)
 - Explain what's happening and *why* at each step; the owner is learning the
