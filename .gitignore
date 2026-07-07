@@ -1,0 +1,15 @@
+# data & models are large / not source — keep them out of git
+data/
+models/
+*.pth
+*.pt
+
+# python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# os
+.DS_Store
+.gradio/
