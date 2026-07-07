@@ -4,6 +4,9 @@ models/
 *.pth
 *.pt
 
+# logs (clean metrics live in reports/train_history.csv, not the raw log)
+*.log
+
 # python
 venv/
 __pycache__/
