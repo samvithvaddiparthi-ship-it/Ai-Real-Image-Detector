@@ -3,6 +3,18 @@
 Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
 (v2). v1 failed to generalize; see `reports/diagnosis.md` for the full autopsy.
 
+## CURRENT STATUS (update as we go)
+- **Phase 1 COMPLETE.** Dataset extracted to `data/raw/`:
+  - 18,514 images = **9,257 real / 9,257 AI**, balanced, fully paired scenes.
+  - ~1,850 images per generator (sd21/sdxl/sd3/dalle3/mj6), even.
+  - All images verified with full pixel decode: **0 broken / 0 truncated**.
+  - `data/raw/manifest.csv` columns: `scene_id, label_a, generator, path`.
+    (real + its AI twin share a `scene_id` — the key to leakage-safe splitting.)
+  - Sample grids in `reports/` (sample_grid.png, late_scenes_grid.png).
+- **NEXT: Phase 2** — leakage-safe train/val/test split by `scene_id`, hold out
+  Midjourney (mj6) entirely for the generalization test, write `src/preprocessing.py`
+  (one shared resize+normalize used by BOTH training and inference).
+
 ## Working style (important)
 - Explain what's happening and *why* at each step; the owner is learning the
   pipeline, not just shipping a model. Don't silently do large or irreversible
