@@ -21,13 +21,14 @@ const sections = {
   result: el('resultSection'),
 };
 
-// Single source of truth for what's visible. The big dropzone is hidden while
-// loading/showing a result so the verdict is the focus; Clear returns to idle.
+// Single source of truth for what's visible. The dropzone stays visible at all
+// times, so uploading another image simply replaces the current result — no
+// separate "clear" step needed.
 function setState(state) {
   const vis = {
     idle:    { upload: 1, loading: 0, result: 0, error: 0 },
-    loading: { upload: 0, loading: 1, result: 0, error: 0 },
-    result:  { upload: 0, loading: 0, result: 1, error: 0 },
+    loading: { upload: 1, loading: 1, result: 0, error: 0 },
+    result:  { upload: 1, loading: 0, result: 1, error: 0 },
     error:   { upload: 1, loading: 0, result: 0, error: 1 },
   }[state];
   for (const key in sections) sections[key].hidden = !vis[key];
@@ -95,13 +96,6 @@ function render(r) {
   el('techConfidence').textContent = fmtProb(r.confidence);
 }
 
-function reset() {
-  fileInput.value = '';
-  if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
-  setState('idle');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
 // Keep the header badge in sync with the actual loaded model (no hardcoding).
 fetch('/api/health').then((r) => r.json()).then((h) => {
   el('modelBadge').textContent = `${h.model} · threshold ${h.threshold.toFixed(2)}`;
@@ -131,15 +125,8 @@ dropzone.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
 });
 
-el('resetBtn').addEventListener('click', reset);
-
 // Paste an image (Cmd/Ctrl+V) to analyze it — handy for screenshots.
 window.addEventListener('paste', (e) => {
   const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
   if (item) analyze(item.getAsFile());
-});
-
-// Esc clears the current result.
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !sections.result.hidden) reset();
 });

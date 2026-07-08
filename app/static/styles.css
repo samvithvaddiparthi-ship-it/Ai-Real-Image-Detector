@@ -200,24 +200,6 @@ body {
 .verdict--real .verdict__dot { background: var(--real); }
 .verdict__summary { color: var(--text-secondary); font-size: 14.5px; max-width: 56ch; }
 
-.btn-clear {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font);
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 7px 13px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-.btn-clear:hover { border-color: var(--border-strong); color: var(--text); }
-
 /* Probability meter */
 .meter {
   background: var(--surface);
@@ -340,8 +322,6 @@ body {
   .main { padding: 36px 0; }
   .intro h1 { font-size: 23px; }
   .images { grid-template-columns: 1fr; }
-  .verdict { flex-direction: column-reverse; align-items: stretch; }
-  .btn-clear { align-self: flex-end; }
   .verdict__label { font-size: 25px; }
   .tech__grid { grid-template-columns: 1fr; }
 }
