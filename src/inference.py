@@ -30,9 +30,10 @@ DEFAULT_CKPT = Path("models/resnet50_colab_production.pth")
 class Prediction:
     """A single image's result. Plain data — safe to JSON-serialize for the API."""
     verdict: str          # "ai" or "real"
-    p_ai: float           # P(image is AI-generated), 0..1 (the raw probability)
+    p_ai: float           # P(image is AI-generated), 0..1 (temperature-calibrated)
     confidence: float     # probability mass on the predicted class, 0..1
     threshold: float      # decision threshold applied (pred=ai iff p_ai >= threshold)
+    temperature: float    # calibration temperature (1.0 = uncalibrated)
     model_arch: str       # e.g. "resnet50"
     inference_ms: float   # forward-pass time in milliseconds
 
@@ -59,6 +60,8 @@ class Detector:
         self.class_names: list[str] = ck["class_names"]      # ["real", "ai"]
         self.ai_index: int = self.class_names.index("ai")
         self.threshold: float = ck.get("decision_threshold", 0.5)
+        # temperature-scaling calibration (1.0 = none); see src/calibrate.py
+        self.temperature: float = ck.get("temperature", 1.0)
 
         self.model = build_model(self.arch, pretrained=False)
         self.model.load_state_dict(ck["model_state"])
@@ -79,14 +82,15 @@ class Detector:
         """Run the model on an already-preprocessed tensor."""
         t0 = time.perf_counter()
         logits = self.model(tensor)
-        p_ai = torch.softmax(logits, dim=1)[0, self.ai_index].item()
+        # temperature scaling: soften logits before softmax for calibrated probs
+        p_ai = torch.softmax(logits / self.temperature, dim=1)[0, self.ai_index].item()
         dt_ms = (time.perf_counter() - t0) * 1000.0
 
         verdict = "ai" if p_ai >= self.threshold else "real"
         confidence = p_ai if verdict == "ai" else 1.0 - p_ai
         return Prediction(verdict=verdict, p_ai=p_ai, confidence=confidence,
-                          threshold=self.threshold, model_arch=self.arch,
-                          inference_ms=dt_ms)
+                          threshold=self.threshold, temperature=self.temperature,
+                          model_arch=self.arch, inference_ms=dt_ms)
 
     def predict(self, image) -> Prediction:
         """Convenience: path/PIL -> Prediction."""

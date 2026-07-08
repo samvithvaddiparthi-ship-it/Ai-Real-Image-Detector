@@ -2,6 +2,15 @@
 // server-side via /api/predict — this file never touches model logic.
 
 const el = (id) => document.getElementById(id);
+
+// Honest probability formatting: avoid claiming absolute certainty. A calibrated
+// 99.98% shouldn't read as a flat "100.0%".
+function fmtProb(p) {
+  const v = p * 100;
+  if (v >= 99.95) return '>99.9%';
+  if (v <= 0.05) return '<0.1%';
+  return `${v.toFixed(1)}%`;
+}
 const dropzone = el('dropzone');
 const fileInput = el('fileInput');
 const sections = {
@@ -52,29 +61,33 @@ async function analyze(file) {
 
 function render(r) {
   const isAI = r.verdict === 'ai';
-  const pct = (r.p_ai * 100).toFixed(1);
+  const pctText = fmtProb(r.p_ai);
+  const pctNum = r.p_ai * 100;
 
   const pill = el('verdictPill');
   pill.textContent = isAI ? 'AI-generated' : 'Real photograph';
   pill.className = `pill ${isAI ? 'pill--ai' : 'pill--real'}`;
 
   el('verdictSummary').textContent = isAI
-    ? `The model estimates a ${pct}% probability that this image is AI-generated, above the ${r.threshold} decision threshold.`
-    : `The model estimates a ${pct}% probability that this image is AI-generated, below the ${r.threshold} decision threshold.`;
+    ? `The model estimates a ${pctText} probability that this image is AI-generated, above the ${r.threshold.toFixed(2)} decision threshold.`
+    : `The model estimates a ${pctText} probability that this image is AI-generated, below the ${r.threshold.toFixed(2)} decision threshold.`;
 
-  el('probValue').textContent = `${pct}%`;
+  el('probValue').textContent = pctText;
   const fill = el('probFill');
   fill.className = `meter__fill ${isAI ? 'meter__fill--ai' : 'meter__fill--real'}`;
-  requestAnimationFrame(() => { fill.style.width = `${pct}%`; });
-  el('thresholdMark').style.left = `${r.threshold * 100}%`;
+  requestAnimationFrame(() => { fill.style.width = `${pctNum}%`; });
+  const mark = el('thresholdMark');
+  mark.style.left = `${r.threshold * 100}%`;
+  mark.querySelector('span').textContent = r.threshold.toFixed(2);
 
   el('originalImg').src = r.original;
   el('heatmapImg').src = r.heatmap;
 
   el('techModel').textContent = r.model_arch;
   el('techThreshold').textContent = r.threshold.toFixed(2);
-  el('techProb').textContent = `${pct}%`;
-  el('techConfidence').textContent = `${(r.confidence * 100).toFixed(1)}%`;
+  el('techTemp').textContent = r.temperature.toFixed(2);
+  el('techProb').textContent = pctText;
+  el('techConfidence').textContent = fmtProb(r.confidence);
   el('techTime').textContent = `${r.inference_ms.toFixed(0)} ms`;
 
   show('result');
@@ -84,7 +97,7 @@ function render(r) {
 
 // Keep the header badge in sync with the actual loaded model (no hardcoding).
 fetch('/api/health').then((r) => r.json()).then((h) => {
-  el('modelBadge').textContent = `${h.model} · threshold ${h.threshold}`;
+  el('modelBadge').textContent = `${h.model} · threshold ${h.threshold.toFixed(2)}`;
 }).catch(() => {});
 
 // --- events ---------------------------------------------------------------

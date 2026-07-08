@@ -79,9 +79,15 @@ Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
   - New deps (requirements.txt): fastapi, uvicorn[standard], python-multipart.
   - NOTE: production .pth gitignored; lives in models/ locally + Drive
     (ai_detector/results/). Regenerate: download resnet50_colab.pth, run finalize_model.py.
-- **ALL 6 PHASES COMPLETE.** Final: resnet50 @ threshold 0.35, mj6 recall 0.715 /
-  precision 0.926. Possible future work: more generator diversity, calibration
-  (temperature scaling), batch/API endpoints, packaging.
+- **Calibration (post-Phase 6).** `src/calibrate.py`: temperature scaling fit on val.
+  Result: **T=1.059** — model was ALREADY well-calibrated (ECE ~0.006 val / 0.013 test),
+  so this is nearly a no-op (confirms confidence is trustworthy, not a bug). Threshold
+  remapped 0.35 -> 0.358 (calibrated space, same verdicts). T + calibrated threshold
+  embedded in production ckpt; inference.py applies logits/T. UI also formats extreme
+  probs honestly (">99.9%" / "<0.1%" instead of "100.0%"/"0.0%") and shows T.
+- **ALL 6 PHASES COMPLETE.** Final: resnet50, calibrated threshold 0.358 (raw 0.35),
+  T=1.059, mj6 recall 0.715 / precision 0.926. Possible future work: more generator
+  diversity, OOD calibration, batch/API endpoints, packaging.
 
 ## Working style (important)
 - Explain what's happening and *why* at each step; the owner is learning the
