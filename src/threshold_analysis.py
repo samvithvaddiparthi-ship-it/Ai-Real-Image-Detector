@@ -55,8 +55,15 @@ def sweep(df, thresholds):
 
 
 def main():
+    import argparse
+    from pathlib import Path as _Path
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ckpt", type=str, default="models/resnet18_baseline.pth",
+                    help="checkpoint to analyze (e.g. models/resnet50_colab.pth)")
+    args = ap.parse_args()
+
     device = get_device()
-    model = load_model(device)
+    model = load_model(device, _Path(args.ckpt))
     test = predict_split(model, "test", device)
     mj6 = predict_split(model, "gen_holdout", device)
 
@@ -105,8 +112,9 @@ def main():
         ax.axvline(0.5, ls="--", c="gray", lw=1)
         ax.set_title(name); ax.set_xlabel("decision threshold  p_ai >= t")
         ax.set_ylim(0, 1.02); ax.grid(alpha=0.3); ax.legend(fontsize=8)
-    fig.tight_layout(); fig.savefig(REPORTS / "threshold_sweep.png", dpi=120)
-    print(f"\nwrote {REPORTS/'threshold_sweep.png'}")
+    out_png = REPORTS / f"threshold_sweep_{_Path(args.ckpt).stem}.png"
+    fig.tight_layout(); fig.savefig(out_png, dpi=120)
+    print(f"\nwrote {out_png}")
 
 
 if __name__ == "__main__":
