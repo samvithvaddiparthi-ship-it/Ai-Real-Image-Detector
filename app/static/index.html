@@ -43,8 +43,10 @@
 
       <!-- Loading -->
       <section id="loadingSection" class="loading" hidden>
-        <span class="spinner" aria-hidden="true"></span>
-        <span>Analyzing…</span>
+        <div class="loading__card">
+          <img id="loadingImg" class="loading__img" alt="" />
+          <div class="loading__status"><span class="spinner" aria-hidden="true"></span><span>Analyzing…</span></div>
+        </div>
       </section>
 
       <!-- Error -->
@@ -52,12 +54,18 @@
 
       <!-- Result -->
       <section id="resultSection" class="result" hidden>
-        <div class="verdict">
+        <div class="verdict" id="verdictBlock">
           <div class="verdict__main">
-            <span id="verdictPill" class="pill"></span>
+            <div class="verdict__label-row">
+              <span class="verdict__dot" aria-hidden="true"></span>
+              <h2 id="verdictLabel" class="verdict__label"></h2>
+            </div>
             <p id="verdictSummary" class="verdict__summary"></p>
           </div>
-          <button id="resetBtn" class="btn-ghost" type="button">Analyze another</button>
+          <button id="resetBtn" class="btn-clear" type="button" aria-label="Clear and upload another image">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            Clear
+          </button>
         </div>
 
         <div class="meter">

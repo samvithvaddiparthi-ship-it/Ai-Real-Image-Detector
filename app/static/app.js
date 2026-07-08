@@ -11,6 +11,7 @@ function fmtProb(p) {
   if (v <= 0.05) return '<0.1%';
   return `${v.toFixed(1)}%`;
 }
+
 const dropzone = el('dropzone');
 const fileInput = el('fileInput');
 const sections = {
@@ -20,31 +21,36 @@ const sections = {
   result: el('resultSection'),
 };
 
-function show(name) {
-  for (const [key, node] of Object.entries(sections)) {
-    node.hidden = key !== name && !(name === 'result' && key === 'upload');
-  }
-  // keep the uploader visible alongside results so re-upload is easy
-  sections.upload.hidden = name === 'loading';
+// Single source of truth for what's visible. The big dropzone is hidden while
+// loading/showing a result so the verdict is the focus; Clear returns to idle.
+function setState(state) {
+  const vis = {
+    idle:    { upload: 1, loading: 0, result: 0, error: 0 },
+    loading: { upload: 0, loading: 1, result: 0, error: 0 },
+    result:  { upload: 0, loading: 0, result: 1, error: 0 },
+    error:   { upload: 1, loading: 0, result: 0, error: 1 },
+  }[state];
+  for (const key in sections) sections[key].hidden = !vis[key];
 }
+
+let objectUrl = null;
 
 function fail(message) {
   sections.error.textContent = message;
-  sections.error.hidden = false;
-  sections.loading.hidden = true;
+  setState('error');
 }
 
 async function analyze(file) {
   if (!file || !file.type.startsWith('image/')) {
     return fail('Please choose an image file (PNG, JPG, or WebP).');
   }
-  sections.error.hidden = true;
-  sections.result.hidden = true;
-  show('loading');
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  el('loadingImg').src = objectUrl;   // show what's being analyzed
+  setState('loading');
 
   const body = new FormData();
   body.append('file', file);
-
   try {
     const res = await fetch('/api/predict', { method: 'POST', body });
     if (!res.ok) {
@@ -52,10 +58,10 @@ async function analyze(file) {
       throw new Error(detail || `Request failed (${res.status})`);
     }
     render(await res.json());
+    setState('result');
+    sections.result.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     fail(err.message || 'Something went wrong analyzing the image.');
-  } finally {
-    sections.loading.hidden = true;
   }
 }
 
@@ -63,14 +69,13 @@ function render(r) {
   const isAI = r.verdict === 'ai';
   const pctText = fmtProb(r.p_ai);
   const pctNum = r.p_ai * 100;
+  const thr = r.threshold.toFixed(2);
 
-  const pill = el('verdictPill');
-  pill.textContent = isAI ? 'AI-generated' : 'Real photograph';
-  pill.className = `pill ${isAI ? 'pill--ai' : 'pill--real'}`;
-
-  el('verdictSummary').textContent = isAI
-    ? `The model estimates a ${pctText} probability that this image is AI-generated, above the ${r.threshold.toFixed(2)} decision threshold.`
-    : `The model estimates a ${pctText} probability that this image is AI-generated, below the ${r.threshold.toFixed(2)} decision threshold.`;
+  el('verdictBlock').className = `verdict ${isAI ? 'verdict--ai' : 'verdict--real'}`;
+  el('verdictLabel').textContent = isAI ? 'AI-generated' : 'Real photograph';
+  el('verdictSummary').textContent =
+    `The model estimates a ${pctText} probability that this image is AI-generated — `
+    + `${isAI ? 'above' : 'below'} the ${thr} decision threshold.`;
 
   el('probValue').textContent = pctText;
   const fill = el('probFill');
@@ -78,21 +83,23 @@ function render(r) {
   requestAnimationFrame(() => { fill.style.width = `${pctNum}%`; });
   const mark = el('thresholdMark');
   mark.style.left = `${r.threshold * 100}%`;
-  mark.querySelector('span').textContent = r.threshold.toFixed(2);
+  mark.querySelector('span').textContent = thr;
 
   el('originalImg').src = r.original;
   el('heatmapImg').src = r.heatmap;
 
   el('techModel').textContent = r.model_arch;
-  el('techThreshold').textContent = r.threshold.toFixed(2);
+  el('techThreshold').textContent = thr;
   el('techTemp').textContent = r.temperature.toFixed(2);
   el('techProb').textContent = pctText;
   el('techConfidence').textContent = fmtProb(r.confidence);
-  el('techTime').textContent = `${r.inference_ms.toFixed(0)} ms`;
+}
 
-  show('result');
-  sections.result.hidden = false;
-  sections.result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function reset() {
+  fileInput.value = '';
+  if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+  setState('idle');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Keep the header badge in sync with the actual loaded model (no hardcoding).
@@ -124,9 +131,15 @@ dropzone.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
 });
 
-el('resetBtn').addEventListener('click', () => {
-  fileInput.value = '';
-  sections.result.hidden = true;
-  sections.error.hidden = true;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+el('resetBtn').addEventListener('click', reset);
+
+// Paste an image (Cmd/Ctrl+V) to analyze it — handy for screenshots.
+window.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  if (item) analyze(item.getAsFile());
+});
+
+// Esc clears the current result.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !sections.result.hidden) reset();
 });
