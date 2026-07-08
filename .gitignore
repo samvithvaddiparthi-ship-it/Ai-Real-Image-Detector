@@ -1,8 +1,9 @@
-# data & models are large / not source — keep them out of git
+# data & large model files are gitignored (regenerable / large)...
 data/
-models/
-*.pth
+models/*
 *.pt
+# ...except the trained production model, which is shipped so the app runs on a fresh clone
+!models/resnet50_colab_production.pth
 
 # logs (clean metrics live in reports/train_history.csv, not the raw log)
 *.log
