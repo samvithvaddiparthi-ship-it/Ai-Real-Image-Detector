@@ -65,11 +65,23 @@ Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
     **models/resnet50_colab_production.pth** via `src/finalize_model.py`
     (checkpoint now carries weights + arch + preprocessing contract + class_names +
     decision_threshold=0.35 — the single blessed deployment artifact).
-- **NEXT: Phase 6 — Deploy.** Inference app that loads resnet50_colab_production.pth,
-  applies get_eval_transform (the contract) + the embedded 0.35 threshold, outputs
-  real/ai + confidence, plus Grad-CAM heatmaps. Runs on the Mac (MPS/CPU).
-  NOTE: production .pth is gitignored (large); it lives in models/ locally + Drive
-  (ai_detector/results/). Regenerate: download resnet50_colab.pth, run finalize_model.py.
+- **Phase 6 COMPLETE — Deploy.** Engine/UI cleanly separated (UI has ZERO ML logic).
+  - Engine (pure Python): `src/inference.py` (Detector: loads production ckpt, reads
+    embedded arch + preprocessing contract + class order + 0.35 threshold, predicts),
+    `src/gradcam.py` (Grad-CAM on last conv block; overlay). Both reused by CLI + web.
+  - `src/cli.py`: `python src/cli.py img.jpg [--heatmap out.png]`.
+  - Web: `app/server.py` (FastAPI, THIN — marshals HTTP<->engine only; /api/predict,
+    /api/health) + `app/static/` custom frontend (index.html/styles.css/app.js),
+    premium restrained design (NOT gradio — gradio can't hit the design bar). Run:
+    `python -m uvicorn app.server:app --port 8000`. Launch cfg: .claude/launch.json.
+  - Verified live: mj6 AI image -> "AI-generated" 98.8%; COCO real -> "Real" 0.0%.
+    Grad-CAM overlays render; tech panel shows model/threshold/prob/confidence/time.
+  - New deps (requirements.txt): fastapi, uvicorn[standard], python-multipart.
+  - NOTE: production .pth gitignored; lives in models/ locally + Drive
+    (ai_detector/results/). Regenerate: download resnet50_colab.pth, run finalize_model.py.
+- **ALL 6 PHASES COMPLETE.** Final: resnet50 @ threshold 0.35, mj6 recall 0.715 /
+  precision 0.926. Possible future work: more generator diversity, calibration
+  (temperature scaling), batch/API endpoints, packaging.
 
 ## Working style (important)
 - Explain what's happening and *why* at each step; the owner is learning the
