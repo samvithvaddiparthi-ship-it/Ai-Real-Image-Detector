@@ -19,6 +19,9 @@ you change it here and it propagates to training AND the app automatically.
 """
 from __future__ import annotations
 
+import io
+import random
+
 from PIL import Image
 import torch
 from torchvision import transforms
@@ -34,6 +37,57 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 # The one normalize op both train and eval share.
 _NORMALIZE = transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+
+
+# --- Phase 5 augmentation ops (train-only) -----------------------------------
+# These operate on a PIL RGB image, before ToTensor. They deliberately corrupt
+# fragile, generator-specific high-frequency fingerprints so the model must lean
+# on sturdier "AI-ness" cues that transfer to unseen generators (e.g. Midjourney).
+# Written explicitly (not via a torchvision version-specific op) so the recipe is
+# self-documenting and reproducible.
+
+class RandomJPEG:
+    """Re-encode as JPEG at a random quality with probability p.
+
+    Real-world images are almost always JPEG-recompressed at some point; that
+    recompression smears the subtle frequency signatures a generator leaves
+    behind. Training through it forces the model off those brittle cues.
+    """
+
+    def __init__(self, quality=(40, 95), p=0.5):
+        self.quality = quality
+        self.p = p
+
+    def __call__(self, img: Image.Image) -> Image.Image:
+        if random.random() < self.p:
+            q = random.randint(*self.quality)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=q)
+            buf.seek(0)
+            img = Image.open(buf).convert("RGB")
+        return img
+
+
+class RandomDownscale:
+    """Downscale by a random factor then upscale back, with probability p.
+
+    Simulates the resolution loss of images that have been resized around the
+    web, and directly attacks the 'square/native-resolution = AI' shortcut: both
+    classes now appear at varied effective resolutions.
+    """
+
+    def __init__(self, scale=(0.5, 1.0), p=0.5, resample=Image.BILINEAR):
+        self.scale = scale
+        self.p = p
+        self.resample = resample
+
+    def __call__(self, img: Image.Image) -> Image.Image:
+        if random.random() < self.p:
+            w, h = img.size
+            f = random.uniform(*self.scale)
+            nw, nh = max(1, int(w * f)), max(1, int(h * f))
+            img = img.resize((nw, nh), self.resample).resize((w, h), self.resample)
+        return img
 
 
 def load_image(path_or_img) -> Image.Image:
@@ -65,15 +119,21 @@ def get_eval_transform() -> transforms.Compose:
 
 
 def get_train_transform() -> transforms.Compose:
-    """Training transform: light augmentation on top of the SAME normalization.
+    """Training transform: real-world augmentation on top of the SAME normalization.
 
-    Kept deliberately light for the Phase 3 baseline (a random crop + horizontal
-    flip). Heavier, real-world augmentation (JPEG recompression, downscale/upscale,
-    blur) is Phase 5 — added here, still on top of the same _NORMALIZE.
+    Phase 5 recipe. Order matters: geometric ops first (crop/flip), then the
+    real-world corruptions on the 224px PIL image (JPEG, downscale, blur, jitter),
+    then ToTensor + the shared _NORMALIZE. Everything here is train-only and
+    applied at load time — strictly after the split (golden rule #2). The eval /
+    inference contract (get_eval_transform) is deliberately left untouched.
     """
     return transforms.Compose([
-        transforms.RandomResizedCrop(IMAGE_SIZE, scale=(0.7, 1.0)),
+        transforms.RandomResizedCrop(IMAGE_SIZE, scale=(0.6, 1.0)),
         transforms.RandomHorizontalFlip(),
+        RandomJPEG(quality=(40, 95), p=0.5),
+        RandomDownscale(scale=(0.5, 1.0), p=0.5),
+        transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 1.5))], p=0.3),
+        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.02),
         transforms.ToTensor(),
         _NORMALIZE,
     ])

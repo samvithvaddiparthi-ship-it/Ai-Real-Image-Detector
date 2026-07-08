@@ -1,0 +1,82 @@
+{
+  "test": {
+    "n": 1480,
+    "accuracy": 0.9297,
+    "precision_ai": 0.9162,
+    "recall_ai": 0.9459,
+    "f1_ai": 0.9309,
+    "real_recall": 0.9135,
+    "confusion_matrix": {
+      "rows_true": [
+        "real",
+        "ai"
+      ],
+      "cols_pred": [
+        "real",
+        "ai"
+      ],
+      "counts": [
+        [
+          676,
+          64
+        ],
+        [
+          40,
+          700
+        ]
+      ]
+    },
+    "per_generator_ai_recall": {
+      "dalle3": {
+        "n": 186,
+        "ai_recall": 0.9892
+      },
+      "sd21": {
+        "n": 185,
+        "ai_recall": 0.9189
+      },
+      "sd3": {
+        "n": 184,
+        "ai_recall": 0.9239
+      },
+      "sdxl": {
+        "n": 185,
+        "ai_recall": 0.9514
+      }
+    }
+  },
+  "gen_holdout": {
+    "n": 3706,
+    "accuracy": 0.7849,
+    "precision_ai": 0.9184,
+    "recall_ai": 0.6255,
+    "f1_ai": 0.7441,
+    "real_recall": 0.9444,
+    "confusion_matrix": {
+      "rows_true": [
+        "real",
+        "ai"
+      ],
+      "cols_pred": [
+        "real",
+        "ai"
+      ],
+      "counts": [
+        [
+          1750,
+          103
+        ],
+        [
+          694,
+          1159
+        ]
+      ]
+    },
+    "per_generator_ai_recall": {
+      "mj6": {
+        "n": 1853,
+        "ai_recall": 0.6255
+      }
+    }
+  }
+}
