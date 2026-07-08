@@ -35,7 +35,8 @@ Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
     (image_size, imagenet mean/std, class_names); eval/inference assert-verify it.
   - SSL note: pretrained-weights download needs `SSL_CERT_FILE=$(python -c "import
     certifi;print(certifi.where())")` (macOS system-Python cert issue).
-- **Phase 4 COMPLETE.** `src/evaluate.py` -> reports/eval_metrics.json + confusion_*.png.
+- **Phase 4 COMPLETE.** `src/evaluate.py --ckpt <path>` -> reports/eval_metrics_<stem>.json
+  + confusion_<stem>_*.png (stem = e.g. resnet18_baseline).
   - In-distribution TEST (sd21/sdxl/sd3/dalle3): **acc 0.954, F1(ai) 0.954**,
     P(ai) 0.947, R(ai) 0.962, real_recall 0.946. Per-gen AI recall: sdxl 0.984,
     dalle3 0.979, sd21 0.946, sd3 0.940. Strong + even across seen generators.
@@ -44,11 +45,27 @@ Binary image classifier: **AI-generated vs. real photograph**. This is a rebuild
     ~42% of mj6 (false negatives), rarely false-positives. This is the real
     generalization gap v1 hid. Failure mode = mj6 photorealism not recognized.
   - HEADLINE: in-dist AI recall 0.962 vs held-out mj6 AI recall 0.575.
-- **NEXT: Phase 5 — Harden.** Target: raise mj6 recall without wrecking precision.
-  Levers: real-world augmentation (JPEG recompress, down/upscale, blur), decision-
-  threshold tuning / calibration (precision is high, so lowering threshold should
-  recover mj6 recall cheaply), address the square-vs-varied-AR shortcut, possibly
-  a stronger backbone (-> Colab). Re-run evaluate.py to compare.
+- **Phase 5 IN PROGRESS — Harden.** Target: raise mj6 recall without wrecking precision.
+  - Step 1 (diagnosis, `src/threshold_analysis.py`): mj6 AI p_ai is BIMODAL —
+    ~910 confidently AI (p_ai>0.8), but ~538 confidently "real" (p_ai<0.1). Of the
+    787 misses, 617 are confident-wrong -> NOT a threshold problem; it's capability.
+    Threshold sweep saved to reports/threshold_sweep.png. Verdict: retrain needed.
+  - Step 2 (augmentation, in `src/preprocessing.get_train_transform`): added
+    RandomJPEG + RandomDownscale + GaussianBlur + ColorJitter (train-only; eval
+    contract UNCHANGED). Retrained resnet18 -> models/resnet18_augmented.pth.
+    **mj6 AI recall 0.575 -> 0.626 (+93 caught)**, F1 0.710->0.744; small cost on
+    seen test (acc 0.954->0.930). Real, modest gain — confirms the confident-wrong
+    core is hard. Metrics: reports/eval_metrics_resnet18_augmented.json.
+  - Step 3 (stronger backbone -> Colab GPU, CURRENT): refactored to be GPU +
+    multi-backbone. `src/model.py` = shared build_model(arch)/get_device (cuda>mps>cpu),
+    archs: resnet18/resnet50/convnext_tiny. train.py `--arch`; checkpoint records
+    arch; evaluate.py `--ckpt` rebuilds from recorded arch. Checkpoints/history now
+    named `<arch>_<tag>`. Colab notebook: notebooks/colab_train_stronger_backbone.ipynb
+    (clones repo, mounts Drive, untars data_bundle.tar, trains convnext_tiny+resnet50,
+    evals mj6, saves to Drive). Data moved via data_bundle.tar (~1.4GB, gitignored).
+    AWAITING Colab results to pick the winner backbone.
+- **THEN: threshold calibration** to the chosen operating point, then Phase 6 (deploy:
+  inference app honoring the preprocessing contract + Grad-CAM).
 
 ## Working style (important)
 - Explain what's happening and *why* at each step; the owner is learning the

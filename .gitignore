@@ -16,3 +16,4 @@ __pycache__/
 # os
 .DS_Store
 .gradio/
+data_bundle.tar

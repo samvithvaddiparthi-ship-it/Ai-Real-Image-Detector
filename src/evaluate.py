@@ -23,9 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
-from torchvision import models
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -33,30 +31,27 @@ from sklearn.metrics import (confusion_matrix, precision_recall_fscore_support,
                              accuracy_score)
 
 from src.dataset import ImageSplitDataset, CLASS_NAMES
+from src.model import build_model, get_device
 from src.preprocessing import IMAGE_SIZE, IMAGENET_MEAN, IMAGENET_STD
 
 CKPT = Path("models/resnet18_baseline.pth")
 REPORTS = Path("reports")
 
 
-def get_device():
-    return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-
-
-def load_model(device):
-    ck = torch.load(CKPT, map_location=device, weights_only=False)
+def load_model(device, ckpt: Path = CKPT):
+    ck = torch.load(ckpt, map_location=device, weights_only=False)
     # verify the embedded preprocessing contract matches the code (anti-v1 guard)
     pp = ck["preprocessing"]
     assert pp["image_size"] == IMAGE_SIZE, "image_size mismatch train vs eval!"
     assert tuple(pp["imagenet_mean"]) == IMAGENET_MEAN, "normalize mean mismatch!"
     assert tuple(pp["imagenet_std"]) == IMAGENET_STD, "normalize std mismatch!"
     assert ck["class_names"] == CLASS_NAMES, "class order mismatch!"
-    m = models.resnet18(weights=None)
-    m.fc = nn.Linear(m.fc.in_features, 2)
+    # rebuild the SAME architecture the checkpoint was trained as
+    m = build_model(ck.get("arch", "resnet18"), pretrained=False)
     m.load_state_dict(ck["model_state"])
     m.to(device).eval()
-    print(f"loaded {CKPT} (epoch {ck['epoch']}, val_acc {ck['val_acc']:.4f}); "
-          f"preprocessing contract verified.")
+    print(f"loaded {ckpt} (arch {ck.get('arch','resnet18')}, epoch {ck['epoch']}, "
+          f"val_acc {ck['val_acc']:.4f}); preprocessing contract verified.")
     return m
 
 
@@ -114,8 +109,16 @@ def per_generator_ai_recall(df):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ckpt", type=str, default=str(CKPT),
+                    help="checkpoint to evaluate (default: baseline)")
+    args = ap.parse_args()
+    ckpt = Path(args.ckpt)
+    tag = ckpt.stem  # e.g. 'resnet18_baseline' / 'convnext_tiny_colab'
+
     device = get_device()
-    model = load_model(device)
+    model = load_model(device, ckpt)
     results = {}
 
     for split, label in [("test", "In-distribution TEST (sd21/sdxl/sd3/dalle3)"),
@@ -123,7 +126,7 @@ def main():
         df = predict_split(model, split, device)
         m = binary_metrics(df.y_true, df.y_pred)
         cm = save_confusion(df.y_true, df.y_pred, label,
-                            REPORTS / f"confusion_{split}.png")
+                            REPORTS / f"confusion_{tag}_{split}.png")
         gen_recall = per_generator_ai_recall(df)
         # real-class recall (specificity): fraction of reals correctly called real
         reals = df[df.y_true == 0]
@@ -145,9 +148,10 @@ def main():
         for gen, s in sorted(gen_recall.items()):
             print(f"    {gen:8s} n={s['n']:4d}  recall={s['ai_recall']:.4f}")
 
-    with open(REPORTS / "eval_metrics.json", "w") as f:
+    out_json = REPORTS / f"eval_metrics_{tag}.json"
+    with open(out_json, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nwrote {REPORTS/'eval_metrics.json'} and confusion_*.png")
+    print(f"\nwrote {out_json} and confusion_{tag}_*.png")
 
     # headline generalization delta
     mj6 = results["gen_holdout"]["per_generator_ai_recall"].get("mj6", {})

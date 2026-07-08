@@ -27,26 +27,13 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torchvision import models
 
 from src.dataset import ImageSplitDataset, CLASS_NAMES
+from src.model import build_model, get_device, ARCHS
 from src.preprocessing import IMAGE_SIZE, RESIZE_SIZE, IMAGENET_MEAN, IMAGENET_STD
 
 CKPT_DIR = Path("models")
-HISTORY_CSV = Path("reports/train_history.csv")
-
-
-def get_device() -> torch.device:
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
-
-
-def build_model() -> nn.Module:
-    """ResNet18 pretrained on ImageNet, final layer -> 2 classes (real, ai)."""
-    m = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-    m.fc = nn.Linear(m.fc.in_features, 2)
-    return m
+REPORTS = Path("reports")
 
 
 @torch.no_grad()
@@ -74,6 +61,11 @@ def main():
                     help="early-stop after this many epochs w/o val-loss improvement")
     ap.add_argument("--num-workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--arch", type=str, default="resnet18", choices=ARCHS,
+                    help="backbone; resnet50/convnext_tiny for the Colab GPU run")
+    ap.add_argument("--tag", type=str, default="baseline",
+                    help="names the checkpoint (models/<arch>_<tag>.pth) and "
+                         "history (reports/train_history_<arch>_<tag>.csv)")
     ap.add_argument("--smoke", action="store_true",
                     help="tiny fast run: few batches/epoch, 2 epochs, small workers")
     ap.add_argument("--max-batches", type=int, default=0,
@@ -88,7 +80,9 @@ def main():
     torch.manual_seed(args.seed)
     device = get_device()
     CKPT_DIR.mkdir(exist_ok=True)
-    HISTORY_CSV.parent.mkdir(exist_ok=True)
+    REPORTS.mkdir(exist_ok=True)
+    history_csv = REPORTS / f"train_history_{args.arch}_{args.tag}.csv"
+    best_path = CKPT_DIR / f"{args.arch}_{args.tag}.pth"
 
     # --- data ----------------------------------------------------------------
     train_ds = ImageSplitDataset("train")          # augmenting transform
@@ -107,20 +101,19 @@ def main():
     val_dl = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, **dl_kwargs)
 
     # --- model / optim -------------------------------------------------------
-    model = build_model().to(device)
+    model = build_model(args.arch).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=args.weight_decay)
 
     # --- logging setup -------------------------------------------------------
-    with open(HISTORY_CSV, "w", newline="") as f:
+    with open(history_csv, "w", newline="") as f:
         csv.writer(f).writerow(
             ["epoch", "train_loss", "train_acc", "val_loss", "val_acc",
              "lr", "secs", "saved_best"])
 
     best_val_loss = float("inf")
     epochs_no_improve = 0
-    best_path = CKPT_DIR / "resnet18_baseline.pth"
 
     # --- train loop ----------------------------------------------------------
     for epoch in range(1, args.epochs + 1):
@@ -154,7 +147,7 @@ def main():
             epochs_no_improve = 0
             torch.save({
                 "model_state": model.state_dict(),
-                "arch": "resnet18",
+                "arch": args.arch,
                 "class_names": CLASS_NAMES,          # [real, ai]
                 "epoch": epoch,
                 "val_loss": val_loss,
@@ -174,7 +167,7 @@ def main():
         print(f"epoch {epoch}: train_loss={train_loss:.4f} acc={train_acc:.4f} | "
               f"val_loss={val_loss:.4f} acc={val_acc:.4f} | {secs:.0f}s"
               f"{'  <- saved best' if saved else ''}", flush=True)
-        with open(HISTORY_CSV, "a", newline="") as f:
+        with open(history_csv, "a", newline="") as f:
             csv.writer(f).writerow(
                 [epoch, f"{train_loss:.4f}", f"{train_acc:.4f}",
                  f"{val_loss:.4f}", f"{val_acc:.4f}", args.lr,
