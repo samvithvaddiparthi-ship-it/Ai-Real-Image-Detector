@@ -1,7 +1,7 @@
 """
 Leakage-safe train/val/test split for the AI-vs-real detector (Phase 2).
 
-Design (see CLAUDE.md golden rules #2 and #3):
+Design (leakage-safety + held-out-generator principles):
 
   * Split by scene_id, never by row. Each scene_id owns exactly one real photo
     and its one AI twin. Splitting by scene guarantees a real photo (and its

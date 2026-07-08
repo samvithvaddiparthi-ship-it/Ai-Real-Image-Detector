@@ -18,3 +18,7 @@ __pycache__/
 .DS_Store
 .gradio/
 data_bundle.tar
+
+# assistant/editor config — not part of the project
+CLAUDE.md
+.claude/

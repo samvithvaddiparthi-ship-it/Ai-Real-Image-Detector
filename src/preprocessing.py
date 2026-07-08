@@ -1,7 +1,7 @@
 """
 THE preprocessing contract for the AI-vs-real detector.
 
-Golden rule #1 (see CLAUDE.md): resize + normalize is defined ONCE, here, and
+Golden rule #1: resize + normalize is defined ONCE, here, and
 imported by BOTH training and inference. v1 died because the deployed model was
 trained WITHOUT normalization but the app APPLIED ImageNet normalization at
 inference -> train/infer input distributions didn't match -> garbage predictions.
